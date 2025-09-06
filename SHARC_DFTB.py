@@ -1623,6 +1623,8 @@ def removequotes(string):
 
 
 def getDftbVersion(path):
+    #TODO: this method should check if we have a version or commit and rise the errors
+
     # run dftb+ with nonexisting file
     string = os.path.join(path, 'dftb+')
     try:
@@ -1633,7 +1635,11 @@ def getDftbVersion(path):
     comm = proc.communicate()[0].decode()
     # find version string
     for line in comm.split('\n'):
-        if 'DFTB+' in line and ('release' in line or 'version' in line):
+        if 'commit' in line:
+            print('Commit detected, make sure that your version is ok')
+            s = tuple([23,1])
+            return s
+        elif 'DFTB+' in line and ('release' in line or 'version' in line):
             s = re.findall("\d+\.\d+", line)
             s = s[0].split('.')
             s = tuple([int(i) for i in s])
@@ -1662,7 +1668,6 @@ def getsh2Orcakey(sh2Orca, key):
 # ======================================================================= #
 
 
-#GDM: TODO: Change the name to get_sh2Dftb_environ
 def get_sh2Dftb_environ(sh2Orca, key, environ=True, crucial=True):
     line = getsh2Orcakey(sh2Orca, key)
     if line[0]:
@@ -2025,6 +2030,12 @@ def readQMin(QMinfilename):
     if line[0]:
         QMin['wfthres'] = float(line[1])
 
+    # Get MPI processors
+    QMin['nmpi'] = 0
+    tmp = get_sh2Dftb_environ(sh2Dftb, 'nmpi')
+    if '$' not in tmp:
+        QMin['nmpi'] = int(tmp)
+
     # get the nooverlap keyword: no dets will be extracted if present
     line = getsh2Orcakey(sh2Dftb, 'nooverlap')
     if line[0]:
@@ -2121,68 +2132,70 @@ def readQMin(QMinfilename):
 # --------------------------------------------- File setup ---------------------------------- #
 
     # check for initial orbitals
-    # GDM: TODO: This is necessary to restart dftb+, usefull when we want to calculate the
+    # NOTE: This is necessary to restart dftb+, usefull when we want to calculate the
     # gradients for different states so it is not necessary to do the scf many times for the same conformation
-    # Check along namd simulations
+    # Check along namd simulations. The mpi version does not write the charges.bin
     initorbs = {}
-    if 'always_guess' in QMin:
-        QMin['initorbs'] = {}
-    elif 'init' in QMin or 'always_orb_init' in QMin:
-        for job in QMin['joblist']:
-            filename = os.path.join(QMin['pwd'], 'charges.bin.init')
-            if os.path.isfile(filename):
-                initorbs[job] = filename
-        for job in QMin['joblist']:
-            filename = os.path.join(QMin['pwd'], 'charges.bin.%i.init' % (job))
-            if os.path.isfile(filename):
-                initorbs[job] = filename
-        if 'always_orb_init' in QMin and len(initorbs) < njobs:
-            print('Initial orbitals missing for some jobs!')
-            sys.exit(70)
-        QMin['initorbs'] = initorbs
-    elif 'newstep' in QMin:
-        pass
-       # GDM: TODO: dftb+ does not work with restart when we are using LC.
-        for job in QMin['joblist']:
-            filename = os.path.join(QMin['savedir'], 'charges.bin.%i' % (job))
-            if os.path.isfile(filename):
-                initorbs[job] = filename + '.old'     # file will be moved to .old
-            else:
-                print('File %s missing in savedir!' % (filename))
-                sys.exit(71)
-        QMin['initorbs'] = initorbs
-    elif 'samestep' in QMin:
-        for job in QMin['joblist']:
-            filename = os.path.join(QMin['savedir'], 'charges.bin.%i' % (job))
-            if os.path.isfile(filename):
-                initorbs[job] = filename
-            else:
-                print('File %s missing in savedir!' % (filename))
-                sys.exit(72)
-        QMin['initorbs'] = initorbs
-    elif 'restart' in QMin:
-        for job in QMin['joblist']:
-            filename = os.path.join(QMin['savedir'], 'charges.bin.%i.old' % (job))
-            if os.path.isfile(filename):
-                initorbs[job] = filename
-            else:
-                print('File %s missing in savedir!' % (filename))
-                sys.exit(73)
-        QMin['initorbs'] = initorbs
-
-
-    # make name for backup directory
-    if 'backup' in QMin:
-        backupdir = QMin['savedir'] + '/backup'
-        backupdir1 = backupdir
-        i = 0
-        while os.path.isdir(backupdir1):
-            i += 1
-            if 'step' in QMin:
-                backupdir1 = backupdir + '/step%s_%i' % (QMin['step'][0], i)
-            else:
-                backupdir1 = backupdir + '/calc_%i' % (i)
-        QMin['backup'] = backupdir
+    QMin['initorbs'] = initorbs
+    # if 'always_guess' in QMin:
+    #     QMin['initorbs'] = {}
+    # elif 'init' in QMin or 'always_orb_init' in QMin:
+    #     for job in QMin['joblist']:
+    #         filename = os.path.join(QMin['pwd'], 'charges.bin.init')
+    #         if os.path.isfile(filename):
+    #             initorbs[job] = filename
+    #     for job in QMin['joblist']:
+    #         filename = os.path.join(QMin['pwd'], 'charges.bin.%i.init' % (job))
+    #         if os.path.isfile(filename):
+    #             initorbs[job] = filename
+    #     if 'always_orb_init' in QMin and len(initorbs) < njobs:
+    #         print('Initial orbitals missing for some jobs!')
+    #         sys.exit(70)
+    #     QMin['initorbs'] = initorbs
+    # elif 'newstep' in QMin:
+    #    # TODO: dftb+ does not work with restart when we are using LC.
+    #    # TODO: dftb+ mpi version does not write the charges.bin
+    #
+    #     for job in QMin['joblist']:
+    #         filename = os.path.join(QMin['savedir'], 'charges.bin.%i' % (job))
+    #         if os.path.isfile(filename):
+    #             initorbs[job] = filename + '.old'     # file will be moved to .old
+    #         else:
+    #             print('File %s missing in savedir!' % (filename))
+    #             sys.exit(71)
+    #     QMin['initorbs'] = initorbs
+    # elif 'samestep' in QMin:
+    #     for job in QMin['joblist']:
+    #         filename = os.path.join(QMin['savedir'], 'charges.bin.%i' % (job))
+    #         if os.path.isfile(filename):
+    #             initorbs[job] = filename
+    #         else:
+    #             print('File %s missing in savedir!' % (filename))
+    #             sys.exit(72)
+    #     QMin['initorbs'] = initorbs
+    # elif 'restart' in QMin:
+    #     for job in QMin['joblist']:
+    #         filename = os.path.join(QMin['savedir'], 'charges.bin.%i.old' % (job))
+    #         if os.path.isfile(filename):
+    #             initorbs[job] = filename
+    #         else:
+    #             print('File %s missing in savedir!' % (filename))
+    #             sys.exit(73)
+    #     QMin['initorbs'] = initorbs
+    #
+    #
+    # # make name for backup directory
+    # if 'backup' in QMin:
+    #     backupdir = QMin['savedir'] + '/backup'
+    #     backupdir1 = backupdir
+    #     i = 0
+    #     while os.path.isdir(backupdir1):
+    #         i += 1
+    #         if 'step' in QMin:
+    #             backupdir1 = backupdir + '/step%s_%i' % (QMin['step'][0], i)
+    #         else:
+    #             backupdir1 = backupdir + '/calc_%i' % (i)
+    #     QMin['backup'] = backupdir
 
     if DEBUG:
         print('======= DEBUG print for QMin =======')
@@ -2407,7 +2420,7 @@ def run_calc(WORKDIR, QMin):
     try:
         setupWORKDIR(WORKDIR, QMin)
         strip = True
-        err = runDFTB(WORKDIR, QMin['dftbdir'], strip)
+        err = runDFTB(WORKDIR, QMin['dftbdir'], QMin['nmpi'], strip)
         # err=0
     except Exception as problem:
         print('*' * 50 + '\nException in run_calc(%s)!' % (WORKDIR))
@@ -2455,7 +2468,6 @@ def modifyTemplate(QMin):
         template['Analysis']['CalculateForces'] = 'No'
         template['ExcitedState'] = {
                 'Casida': {
-                    'TammDancoff': 'Yes',
                     'NrOfExcitations': QMin['states'][0] - 1,
                     'Symmetry': 'Singlet',
                     'Diagonalizer': {
@@ -2822,11 +2834,15 @@ def shorten_DIR(string):
 # ======================================================================= #
 
 
-def runDFTB(WORKDIR, dftbdir, strip=False):
+def runDFTB(WORKDIR, dftbdir, nmpi, strip=False):
     prevdir = os.getcwd()
     os.chdir(WORKDIR)
     string = os.path.join(dftbdir, 'dftb+') + ' '
     string += 'dftb_in.hsd'
+
+    if nmpi != 0:
+        string = f'mpirun -np {nmpi} {string}'
+
     if PRINT or DEBUG:
         starttime = datetime.datetime.now()
         sys.stdout.write('START:\t%s\t%s\t"%s"\n' % (shorten_DIR(WORKDIR), starttime, shorten_DIR(string)))
@@ -2870,10 +2886,11 @@ def stripWORKDIR(WORKDIR):
 
 def moveOldFiles(QMin):
     # moves all relevant files in the savedir to old files (per job)
-    # GDM: TODO: this is not necessary in fact since dftb+ does not make restart in LC
+    #  TODO: this is not necessary in fact since dftb+ does not make restart in LC
     if PRINT:
         print('>>>>>>>>>>>>> Moving old files')
-    basenames = ['charges.bin','XplusY.DAT']
+    #basenames = ['charges.bin','XplusY.DAT']
+    basenames = ['XplusY.DAT']
     if 'nooverlap' not in QMin:
         pass
         #basenames.append('mos')
@@ -2912,7 +2929,6 @@ def moveOldFiles(QMin):
 #           os.remove(rmfile)
 #           if PRINT:
 #               print('rm ' + rmfile)
-    print
 
 # ======================================================================= #
 # def saveGeometry(QMin):
@@ -2930,9 +2946,12 @@ def moveOldFiles(QMin):
 
 
 def saveFiles(WORKDIR, QMin):
+    # NOTE: here we can save the files needed for theodore
+
     # copy the bin files from master directories
     job = QMin['IJOB']
-    basenames = ['charges.bin','XplusY.DAT']
+    #basenames = ['charges.bin','XplusY.DAT']
+    basenames = ['XplusY.DAT']
     for file in basenames:
         fromfile = os.path.join(WORKDIR, file)
         if not os.path.isfile(fromfile):
