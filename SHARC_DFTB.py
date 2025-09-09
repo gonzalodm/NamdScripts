@@ -2217,7 +2217,7 @@ def parallel_speedup(N, scaling):
 
 
 def divide_slots(ncpu, ntasks, scaling):
-    # this routine figures out the optimal distribution of the tasks over the CPU cores
+    # NOTE: this routine figures out the optimal distribution of the tasks over the CPU cores
     #   returns the number of rounds (how many jobs each CPU core will contribute to),
     #   the number of slots which should be set in the Pool,
     #   and the number of cores for each job.
@@ -2342,7 +2342,8 @@ def runjobs(schedule, QMin):
     for ijobset, jobset in enumerate(schedule):
         if not jobset:
             continue
-        pool = Pool(processes=QMin['nslots_pool'][ijobset])
+        # pool = Pool(processes=QMin['nslots_pool'][ijobset])
+        pool = Pool(processes=3)
         for job in jobset:
             QMin1 = jobset[job]
             WORKDIR = os.path.join(QMin['scratchdir'], job)
@@ -2494,10 +2495,10 @@ def modifyTemplate(QMin):
     # Calculation of the non-adiabatic couplings
     else:
         template = deepcopy(QMin['template'])
+        template['Analysis']['CalculateForces'] = 'No'
         template['ExcitedState'] = {
                 'Casida': {
                     'NrOfExcitations': QMin['states'][0] - 1,
-                    'StateOfInterest': 1,
                     'Symmetry': 'Singlet',
                     'Diagonalizer': {
                         'Stratmann': {}
