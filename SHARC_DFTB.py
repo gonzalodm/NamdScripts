@@ -2030,11 +2030,17 @@ def readQMin(QMinfilename):
     if line[0]:
         QMin['wfthres'] = float(line[1])
 
-    # Get MPI processors
+    # Get MPI processors for each calculation
     QMin['nmpi'] = 0
     tmp = get_sh2Dftb_environ(sh2Dftb, 'nmpi')
     if '$' not in tmp:
         QMin['nmpi'] = int(tmp)
+
+    # Get the number of calculation that it will run at the same time
+    QMin['nslots_pool'] = 1
+    tmp = get_sh2Dftb_environ(sh2Dftb, 'ncalcs')
+    if '$' not in tmp:
+        QMin['nslots_pool'] = int(tmp)
 
     # get the nooverlap keyword: no dets will be extracted if present
     line = getsh2Orcakey(sh2Dftb, 'nooverlap')
@@ -2274,7 +2280,6 @@ def generate_joblist(QMin):
 
     # Variables
     schedule = []
-    QMin['nslots_pool'] = []
 
     # How many tasks will be running in parallel.
     ntasks = 1 # include master
@@ -2285,7 +2290,6 @@ def generate_joblist(QMin):
     if QMin['nacmap']:
         ntasks += 1
     nrounds, nslots, cpu_per_run = divide_slots(QMin['ncpu'],ntasks,QMin['schedule_scaling'])
-    QMin['nslots_pool'].append(nslots)
 
     # Master Schedule
     QMin1 = deepcopy(QMin)
@@ -2339,11 +2343,11 @@ def runjobs(schedule, QMin):
     # GDM: This launch all the jobs. schedule object will have (in principle) two elements. The first one should contain
     print('>>>>>>>>>>>>> Starting the DFTB+ job execution')
     errorcodes = {}
+    print(f'GDM: Running {QMin["nslots_pool"]} at the same time....')
     for ijobset, jobset in enumerate(schedule):
         if not jobset:
             continue
-        # pool = Pool(processes=QMin['nslots_pool'][ijobset])
-        pool = Pool(processes=3)
+        pool = Pool(processes=QMin['nslots_pool'])
         for job in jobset:
             QMin1 = jobset[job]
             WORKDIR = os.path.join(QMin['scratchdir'], job)
