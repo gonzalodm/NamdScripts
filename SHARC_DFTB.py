@@ -2134,6 +2134,7 @@ def readQMin(QMinfilename):
     nacmap = list(nacmap)
     nacmap.sort()
     QMin['nacmap'] = nacmap
+    QMin['dftb_nacvs'] = limitNACVsinDFTB(nacmap)
 
 # --------------------------------------------- File setup ---------------------------------- #
 
@@ -2343,7 +2344,6 @@ def runjobs(schedule, QMin):
     # GDM: This launch all the jobs. schedule object will have (in principle) two elements. The first one should contain
     print('>>>>>>>>>>>>> Starting the DFTB+ job execution')
     errorcodes = {}
-    print(f'GDM: Running {QMin["nslots_pool"]} at the same time....')
     for ijobset, jobset in enumerate(schedule):
         if not jobset:
             continue
@@ -2500,6 +2500,16 @@ def modifyTemplate(QMin):
     else:
         template = deepcopy(QMin['template'])
         template['Analysis']['CalculateForces'] = 'No'
+
+        # Set the minimum ammount of nacvs to calculate
+        minNac = 0
+        maxNac = QMin['states'][0] - 1
+        if QMin['dftb_nacvs'][0] != -1:
+            maxNac = QMin['dftb_nacvs'][1] - 1
+        else:
+            print('Error in input NACVs in dftb+, The code should not be here.!')
+            sys.exit(101)
+
         template['ExcitedState'] = {
                 'Casida': {
                     'NrOfExcitations': QMin['states'][0] - 1,
@@ -2507,7 +2517,7 @@ def modifyTemplate(QMin):
                     'Diagonalizer': {
                         'Stratmann': {}
                     },
-                    'StateCouplings': '0\t'+str(QMin['states'][0]-1)
+                    'StateCouplings': str(minNac)+'\t'+str(maxNac)
                 }
         }
     return template
@@ -3976,13 +3986,53 @@ def readAutoTag(filename,properties):
 
     return data
 
-def getCoupleNacvs(nacvs,QMin):
+def limitNACVsinDFTB(nacmap):
+    """This function limit the amount of NACVs to calculate inside of dftb+"""
+    max_nacvs = []
+    for nac in nacmap:
+        max_nacvs.append(nac[3])
+
+    dftbCouple = (-1,-1)
+    if len(max_nacvs) > 0:
+        maxN = max(max_nacvs)
+        dftbCouple = (1,maxN)
+
+    return dftbCouple
+
+def upper_index(ii, jj, n):
+    """Index in flat upper-triangular array (jj > ii)."""
+    return ii * (n - 1) - ii * (ii - 1) // 2 + (jj - ii - 1)
+
+def small_to_big_upper_flat(small_flat, n_big):
+    n_small = int((1 + math.sqrt(1 + 8*len(small_flat))) // 2)
+    big_upper = np.zeros((n_big*(n_big-1)//2,small_flat.shape[1],3))
+    k_small = 0
+    for ii in range(n_small):
+        for jj in range(ii+1, n_small):
+            k_big = upper_index(ii, jj, n_big)
+            big_upper[k_big] = small_flat[k_small]
+            k_small += 1
+    return big_upper
+
+def getCoupleNacvs(nacvsTmp,QMin):
     nmstates = QMin['nmstates']
     totalCoupleStates = int(nmstates*(nmstates-1)/2)
     WORKDIR = QMin['savedir']
-    if totalCoupleStates != nacvs.shape[0]:
-        print("Total number of couple states in non-adiabatic coupling vectors does not match with the outputs of DFTB+")
-        sys.exit(101)
+
+    minNac = QMin['dftb_nacvs'][0]
+    maxNac = QMin['dftb_nacvs'][1]
+
+    if minNac != -1: 
+        print(f'We calculated the NACVs between {minNac}-{maxNac}, But we need between 1-{nmstates}')
+        print('Fixing the dimensions of nacvs and setting the one not calculated to zero.')
+        nacvs = np.zeros((totalCoupleStates,QMin['natom'],3))
+        coupleSmallStates = int(maxNac*(maxNac-1)/2)
+
+        if coupleSmallStates != nacvsTmp.shape[0]:
+            print("Total number of couple states in non-adiabatic coupling vectors does not match with the outputs of DFTB+")
+            sys.exit(101)
+
+        nacvs = small_to_big_upper_flat(nacvsTmp,nmstates)
 
     filename = os.path.join(WORKDIR,'nacvsOld.dat')
     phase = np.ones(totalCoupleStates)
@@ -4005,7 +4055,8 @@ def getCoupleNacvs(nacvs,QMin):
             # Make overlap between current an old nacvs
             for ii in range(totalCoupleStates):
                 dot = np.dot(nacvsOld[ii],nacvs[ii].reshape(-1))
-                if dot < 0.:
+                # Threshold to avoid flip with noise
+                if dot < 1E-6:
                     phase[ii] = -1.
 
     # Save nacvs in QMout with phase corrected
