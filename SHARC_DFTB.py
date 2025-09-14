@@ -1973,6 +1973,24 @@ def readQMin(QMinfilename):
     if '$' not in tmp:
         QMin['nslots_pool'] = int(tmp)
 
+    QMin['ncpu'] = 1
+    line = getsh2Orcakey(sh2Dftb, 'ncpu')
+    if line[0]:
+        try:
+            QMin['ncpu'] = int(line[1])
+        except ValueError:
+            print('Number of CPUs does not evaluate to numerical value!')
+            sys.exit(50)
+
+    # Get the freqency to save files for theodore
+    line = getsh2Orcakey(sh2Dftb, 'theodore')
+    if line[0]:
+        try:
+            QMin['save_theodore'] = int(line[1])
+        except ValueError:
+            print('Number of theodore does not evaluate to numerical value!')
+            sys.exit(50)
+
     # get the nooverlap keyword: no dets will be extracted if present
     line = getsh2Orcakey(sh2Dftb, 'nooverlap')
     if line[0]:
@@ -2413,6 +2431,14 @@ def modifyTemplate(QMin):
                     'WriteTransitionDipole': 'Yes',
                 }
         }
+
+        # Print files needed for Theodore
+        if 'save_theodore' in QMin:
+            template['ExcitedState']['Casida']['WriteSPTransitions'] = 'Yes'
+            template["Options"]["WriteDetailedXml"] = 'Yes'
+            template["Analysis"]['WriteEigenvectors'] = 'Yes'
+            template["Analysis"]['EigenvectorsAsText'] = 'Yes'
+
     # Calculation of the gradients
     elif 'gradmap' in QMin:
         template = deepcopy(QMin['template'])
@@ -2545,7 +2571,7 @@ def runDFTB(WORKDIR, dftbdir, nmpi, strip=False):
 
 def stripWORKDIR(WORKDIR):
     ls = os.listdir(WORKDIR)
-    keep = ['dftb_in.hsd', 'DFTB.err$', 'DFTB.log$', 'charges.bin', 'EXC.DAT', 'NACV.DAT', 'autotest.tag', 'detailed.out','XplusY.DAT','TDP.DAT']
+    keep = ['dftb_in.hsd', 'DFTB.err$', 'DFTB.log$', 'charges.bin', 'EXC.DAT', 'NACV.DAT', 'autotest.tag', 'detailed.out','XplusY.DAT','TDP.DAT', 'SPX.DAT', 'band.out', 'eigenvec.out']
     for ifile in ls:
         delete = True
         for k in keep:
@@ -2621,9 +2647,23 @@ def moveOldFiles(QMin):
 
 
 def saveFiles(WORKDIR, QMin):
-    # NOTE: here we can save the files needed for theodore
+    # Copying files from master directory
 
-    # copy the bin files from master directories
+    print('Saving Files needed for Theodore.')
+    basenames = ['XplusY.DAT','band.out','detailed.out','EXC.DAT','eigenvec.out','SPX.DAT']
+    step = int(QMin['step'][0])
+    if step % QMin['save_theodore'] == 0:
+        for file in basenames:
+            fromfile = os.path.join(WORKDIR, file)
+            if not os.path.isfile(fromfile):
+               print('File %s not found, cannot move to _STEP!' % (fromfile))
+               sys.exit(77)
+            tofile = os.path.join(QMin['savedir'], '%s_%i' % (file,step))
+            shutil.copy(fromfile, tofile)
+            if PRINT:
+                print(shorten_DIR(tofile))
+
+    # Saving other stuffs
     job = QMin['IJOB']
     #basenames = ['charges.bin','XplusY.DAT']
     basenames = ['XplusY.DAT']
