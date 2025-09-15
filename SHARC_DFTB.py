@@ -3775,6 +3775,13 @@ def getQMout(QMin):
             tagfile = os.path.join(WORKDIR, 'autotest_nacvs.tag')
             scratchNacvs = readAutoTag(tagfile,properties)
             dftbResults['nacvs'] = getCoupleNacvs(scratchNacvs['nac_vectors'],QMin)
+        else:
+            # In case that we don't calculate the nacvs at this step, we save a zero nacvs
+            totalCoupleStates = int(QMin['nmstates']*(QMin['nmstates']-1)/2)
+            filename = os.path.join(QMin['savedir'],'nacvsOld.dat')
+            nacvs = np.zeros((totalCoupleStates,QMin['natom'],3))
+            xnac = nacvs.reshape((totalCoupleStates,-1))
+            np.savetxt(filename,xnac)
 
     # Hamiltonian
     if 'h' in QMin:
