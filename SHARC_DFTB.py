@@ -2652,16 +2652,17 @@ def saveFiles(WORKDIR, QMin):
     print('Saving Files needed for Theodore.')
     basenames = ['XplusY.DAT','band.out','detailed.out','EXC.DAT','eigenvec.out','SPX.DAT']
     step = int(QMin['step'][0])
-    if step % QMin['save_theodore'] == 0:
-        for file in basenames:
-            fromfile = os.path.join(WORKDIR, file)
-            if not os.path.isfile(fromfile):
-               print('File %s not found, cannot move to _STEP!' % (fromfile))
-               sys.exit(77)
-            tofile = os.path.join(QMin['savedir'], '%s_%i' % (file,step))
-            shutil.copy(fromfile, tofile)
-            if PRINT:
-                print(shorten_DIR(tofile))
+    if 'save_theodore' in QMin:
+        if step % QMin['save_theodore'] == 0:
+            for file in basenames:
+                fromfile = os.path.join(WORKDIR, file)
+                if not os.path.isfile(fromfile):
+                   print('File %s not found, cannot move to _STEP!' % (fromfile))
+                   sys.exit(77)
+                tofile = os.path.join(QMin['savedir'], '%s_%i' % (file,step))
+                shutil.copy(fromfile, tofile)
+                if PRINT:
+                    print(shorten_DIR(tofile))
 
     # Saving other stuffs
     job = QMin['IJOB']
