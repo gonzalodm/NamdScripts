@@ -1571,7 +1571,7 @@ def getDftbVersion(path):
             s = tuple([23,1])
             return s
         elif 'DFTB+' in line and ('release' in line or 'version' in line):
-            s = re.findall("\d+\.\d+", line)
+            s = re.findall(r"\d+\.\d+", line)
             s = s[0].split('.')
             s = tuple([int(i) for i in s])
             return s
