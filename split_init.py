@@ -2,6 +2,9 @@ ff = open("initconds","r")
 file = ff.readlines()
 ff.close()
 
+# unit convert
+BOHR_2_ANG = 0.529177
+
 # Get Atom and Temp.
 for line in file:
     if "Natom" in line:
@@ -11,8 +14,6 @@ for line in file:
 
 print("Number of Atoms:",natom)
 print("Temperature Ensemble [K]:",temp)
-
-ftraj = open("final_traj.xyz","w")
 
 # Read geom and velocs
 read = False
@@ -32,12 +33,14 @@ for ii in range(len(file)):
     if read:
         # Open output files
         nameX = "geom_"  + str(code)
+        nameXYZ = "geom_"  + str(code) + ".xyz"
         nameV = "veloc_" + str(code)
         fx = open(nameX,"w")
+        fxyz = open(nameXYZ, "w")
         fv = open(nameV,"w")
 
-        ftraj.write("%i\n" % natom)
-        ftraj.write("\n")
+        fxyz.write("%i\n" % natom)
+        fxyz.write("\n")
         for jj in range(natom):
             idx = ii + jj
             line = file[idx].split()
@@ -46,9 +49,12 @@ for ii in range(len(file)):
             output = " ".join(line[6:]) + "\n"
             fv.write(output)
 
-            arr = [line[0],line[2],line[3],line[4]]
+            x = float(line[2]) * BOHR_2_ANG
+            y = float(line[3]) * BOHR_2_ANG
+            z = float(line[4]) * BOHR_2_ANG
+            arr = [line[0],str(x),str(y),str(z)]
             output = " ".join(arr) + "\n"
-            ftraj.write(output)
+            fxyz.write(output)
         read = False
         ii += natom
 
